@@ -32,7 +32,7 @@ on:
 
 jobs:
   configure:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, monkci-runners-8vcpu]
     name: Configure Workflow
     outputs:
       is-draft: ${{ steps.check-draft-pr.outputs.is-draft }}
@@ -62,13 +62,21 @@ jobs:
 
   load-catalog:
     needs: [configure]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, monkci-runners-8vcpu]
     name: Load Test Catalog
     steps:
+      - name: Clean workspace
+        run: |
+          chmod -R u+w ${{ github.workspace }} 2>/dev/null || true
+          rm -rf ${{ github.workspace }}/.git 2>/dev/null || true
+          rm -rf ${{ github.workspace }}/* 2>/dev/null || true
+        continue-on-error: true
+
       - name: Checkout main
         uses: actions/checkout@v5
         with:
           persist-credentials: false
+          clean: true
 
       - name: Checkout test-catalog
         uses: actions/checkout@v5
@@ -110,17 +118,25 @@ jobs:
 
   validate:
     needs: [configure]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, monkci-runners-8vcpu]
     name: Compile and Check (Merge Ref)
     steps:
       - name: Env
         run: printenv
         env:
           GITHUB_CONTEXT: ${{ toJson(github) }}
+      - name: Clean workspace
+        run: |
+          chmod -R u+w ${{ github.workspace }} 2>/dev/null || true
+          rm -rf ${{ github.workspace }}/.git 2>/dev/null || true
+          rm -rf ${{ github.workspace }}/* 2>/dev/null || true
+        continue-on-error: true
+
       - name: Checkout code
         uses: actions/checkout@v5
         with:
           persist-credentials: false
+          clean: true
           ref: ${{ github.sha }}  # this is the default, just being explicit.
       - name: Setup Python
         uses: ./.github/actions/setup-python
@@ -130,7 +146,7 @@ jobs:
           java-version: 25
           gradle-cache-read-only: ${{ !inputs.is-trunk }}
           gradle-cache-write-only: ${{ inputs.is-trunk }}
-          develocity-access-key: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+          develocity-access-key: ${{ secrets.DEVELOCITY_ACCESS_KEY || '' }}
       - name: Compile and validate
         env:
           SCAN_ARG: ${{ inputs.is-public-fork && '--no-scan' || '--scan' }}
@@ -176,7 +192,7 @@ jobs:
   test:
     needs: [configure, validate, load-catalog]
     if: ${{ ! needs.configure.outputs.is-draft }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, monkci-runners-8vcpu]
     strategy:
       fail-fast: false
       matrix:
@@ -191,10 +207,18 @@ jobs:
       job-variation: ${{ matrix.java }}-${{ matrix.run-flaky == true && 'flaky' || 'noflaky' }}-${{ matrix.run-new == true && 'new' || 'nonew' }}
     name: JUnit tests Java ${{ matrix.java }}${{ matrix.run-flaky == true && ' (flaky)' || '' }}${{ matrix.run-new == true && ' (new)' || '' }}
     steps:
+      - name: Clean workspace
+        run: |
+          chmod -R u+w ${{ github.workspace }} 2>/dev/null || true
+          rm -rf ${{ github.workspace }}/.git 2>/dev/null || true
+          rm -rf ${{ github.workspace }}/* 2>/dev/null || true
+        continue-on-error: true
+
       - name: Checkout code
         uses: actions/checkout@v5
         with:
           persist-credentials: false
+          clean: true
           ref: ${{ needs.configure.outputs.sha }}
       - name: Setup Python
         uses: ./.github/actions/setup-python
@@ -204,7 +228,7 @@ jobs:
           java-version: ${{ matrix.java }}
           gradle-cache-read-only: ${{ !inputs.is-trunk }}
           gradle-cache-write-only: ${{ inputs.is-trunk }}
-          develocity-access-key: ${{ secrets.DEVELOCITY_ACCESS_KEY }}
+          develocity-access-key: ${{ secrets.DEVELOCITY_ACCESS_KEY || '' }}
 
       # If the load-catalog job failed, we won't be able to download the artifact. Since we don't want this to fail
       # the overall workflow, so we'll continue here without a test catalog.
@@ -277,7 +301,7 @@ jobs:
   collate-test-catalog:
     name: Collate Test Catalog
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, monkci-runners-8vcpu]
     outputs:
       uploaded-test-catalog: ${{ steps.archive-test-catalog.outcome == 'success' }}
     steps:
@@ -329,7 +353,7 @@ jobs:
     name: Update Test Catalog
     needs: collate-test-catalog
     if: ${{ inputs.is-trunk && needs.collate-test-catalog.outputs.uploaded-test-catalog == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, monkci-runners-8vcpu]
     permissions:
       contents: write
     steps:
@@ -367,7 +391,7 @@ jobs:
     name: "CI checks completed"
     needs: [configure, validate, test]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, monkci-runners-8vcpu]
     steps:
       - name: Env
         run: printenv
