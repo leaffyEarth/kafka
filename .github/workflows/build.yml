@@ -305,10 +305,18 @@ jobs:
     outputs:
       uploaded-test-catalog: ${{ steps.archive-test-catalog.outcome == 'success' }}
     steps:
+      - name: Clean workspace
+        run: |
+          chmod -R u+w ${{ github.workspace }} 2>/dev/null || true
+          rm -rf ${{ github.workspace }}/.git 2>/dev/null || true
+          rm -rf ${{ github.workspace }}/* 2>/dev/null || true
+        continue-on-error: true
+
       - name: Checkout code
         uses: actions/checkout@v5
         with:
           persist-credentials: false
+          clean: true
       - name: Download Thread Dumps
         uses: actions/download-artifact@v5
         with:
@@ -352,7 +360,7 @@ jobs:
   update-test-catalog:
     name: Update Test Catalog
     needs: collate-test-catalog
-    if: ${{ inputs.is-trunk && needs.collate-test-catalog.outputs.uploaded-test-catalog == 'true' }}
+    if: false  # Skip - requires credentials to push to test-catalog branch
     runs-on: [self-hosted, monkci-runners-8vcpu]
     permissions:
       contents: write
